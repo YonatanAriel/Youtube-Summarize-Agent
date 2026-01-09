@@ -1,2 +1,4 @@
 .kiro/
 DOCS
+.env
+node_modules
