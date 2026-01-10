@@ -2,9 +2,10 @@ const logger = require('./logger');
 const { testConnection: testGemini } = require('./gemini/client');
 const { testConnection: testTelegram } = require('./telegram/client');
 const { sendMessage } = require('./telegram/client');
-const rssMonitor = require('./rssMonitor');
 const db = require('./db');
 const { processVideo } = require('./video/processor');
+const { searchYoutubeVideos } = require('./api/youtube/search');
+const { fetchVideoDetails, mapToVideoObjects } = require('./youtube/fetcher');
 
 async function runTestMode() {
   try {
@@ -23,15 +24,23 @@ async function runTestMode() {
     await db.init();
     logger.info('Database loaded');
 
-    // Fetch latest videos (ignore last check time)
-    const videos = await rssMonitor.checkNewVideos();
-    logger.info(`Found ${videos.length} videos from channel`);
+    // Fetch latest videos - use a very old date to get all videos
+    const veryOldDate = new Date('2000-01-01').toISOString();
+    logger.info(`[DEBUG] TEST MODE: Fetching all videos from channel (ignoring last check time)`);
+    
+    const items = await searchYoutubeVideos(veryOldDate);
+    logger.info(`Found ${items.length} videos from channel`);
 
-    if (videos.length === 0) {
+    if (items.length === 0) {
       logger.warn('No videos found on channel');
       await sendMessage('⚠️ YouTube Summarizer Test: No videos found on channel');
       process.exit(0);
     }
+
+    // Map to video objects
+    const videoIds = items.map(item => item.id.videoId).join(',');
+    const videoDetails = await fetchVideoDetails(videoIds);
+    const videos = mapToVideoObjects(items, videoDetails);
 
     // Process the latest video (first in list) regardless of whether it's been processed
     const latestVideo = videos[0];
