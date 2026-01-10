@@ -22,7 +22,9 @@ function formatSummary(videoTitle, videoUrl, summary) {
       englishText += `• ${ta}\n`;
     });
 
-    let hebrewText = `\n\n<b>📝 סיכום (עברית)</b>\n`;
+    let hebrewText = `<b>📺 ${videoTitle}</b>\n\n`;
+    hebrewText += `<b>🔗 Watch:</b> ${videoUrl}\n\n`;
+    hebrewText += `<b>📝 סיכום (עברית)</b>\n`;
     hebrewText += `<i>${hebrew.overview}</i>\n\n`;
     
     hebrewText += `<b>🎯 נקודות מפתח:</b>\n`;
@@ -31,12 +33,12 @@ function formatSummary(videoTitle, videoUrl, summary) {
       hebrewText += `<a href="${timestampLink}">[${kp.timestamp}]</a> ${kp.point}\n`;
     });
     
-    hebrewText += `\n<b>💡טיפים:</b>\n`;
+    hebrewText += `\n<b>💡 טיפים:</b>\n`;
     hebrew.takeaways.forEach(ta => {
       hebrewText += `• ${ta}\n`;
     });
 
-    return englishText + hebrewText;
+    return { english: englishText, hebrew: hebrewText };
   } catch (error) {
     logger.error(`Error formatting summary: ${error.message}`);
     throw error;

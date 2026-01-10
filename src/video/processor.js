@@ -10,9 +10,11 @@ async function processVideo(video) {
 
     const summary = await summarizeUrl(video.url);
 
-    const htmlMessage = summaryFormatter.formatSummary(video.title, video.url, summary);
+    const { english, hebrew } = summaryFormatter.formatSummary(video.title, video.url, summary);
 
-    await sendMessage(htmlMessage);
+    await sendMessage(english);
+    
+    await sendMessage(hebrew);
 
     await db.markProcessed(video.videoId, video.title);
   } catch (e) {
