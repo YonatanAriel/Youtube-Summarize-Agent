@@ -26,8 +26,11 @@ jobs:
       - name: Run YouTube Summarizer
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_ENDPOINT: ${{ secrets.GEMINI_ENDPOINT }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_API: ${{ secrets.TELEGRAM_API }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: npm run github-actions
       
       - name: Commit and push changes
