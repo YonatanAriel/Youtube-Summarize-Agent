@@ -32,7 +32,7 @@ async function main() {
       }
     }
 
-    const cronExpression = `07 00 * * *`;
+    const cronExpression = `00 13 * * *`;
     logger.info(`Agent ready. Monitoring for new videos...`);
 
     cronJob = cron.schedule(cronExpression, async () => {
