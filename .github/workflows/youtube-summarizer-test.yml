@@ -58,4 +58,4 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add data/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed videos database (test run)" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed videos database (test run)" && git pull --rebase && git push)
