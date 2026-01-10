@@ -1,0 +1,30 @@
+{
+  "name": "youtube-summarizer-agent",
+  "version": "1.0.0",
+  "description": "Fully autonomous agent that monitors Theo's YouTube channel, summarizes videos with Gemini, and posts to Telegram",
+  "main": "src/agent.js",
+  "scripts": {
+    "start": "node src/agent.js",
+    "test": "jest --run",
+    "test:watch": "jest --watch"
+  },
+  "keywords": [
+    "youtube",
+    "gemini",
+    "telegram",
+    "automation",
+    "agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.2",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "fast-check": "^3.14.0"
+  }
+}
