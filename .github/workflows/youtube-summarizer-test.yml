@@ -1,15 +1,13 @@
-name: YouTube Summarizer Agent
+name: YouTube Summarizer Test
 
 on:
-  schedule:
-    - cron: '12 3 * * *'  # Daily at 03:12 UTC
-  workflow_dispatch:     # Allow manual trigger
+  workflow_dispatch:     # Manual trigger only
 
 permissions:
   contents: write
 
 jobs:
-  summarize:
+  test:
     runs-on: ubuntu-latest
     
     steps:
@@ -26,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       
-      - name: Run YouTube Summarizer
+      - name: Run YouTube Summarizer TEST MODE
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_ENDPOINT: ${{ secrets.GEMINI_ENDPOINT }}
@@ -34,11 +32,11 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_API: ${{ secrets.TELEGRAM_API }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: npm run github-actions
+        run: npm run github-actions-test
       
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add data/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed videos database" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update processed videos database (test run)" && git push)

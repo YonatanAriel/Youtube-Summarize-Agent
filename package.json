@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/agent.js",
     "github-actions": "node src/agent-github-actions.js",
+    "github-actions-test": "node src/agent-github-actions-test.js",
     "test": "jest --run",
     "test:watch": "jest --watch"
   },
