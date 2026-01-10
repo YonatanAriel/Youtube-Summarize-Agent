@@ -9,7 +9,7 @@ function formatSummary(videoTitle, videoUrl, summary) {
     let englishText = `<b>📺 ${videoTitle}</b>\n\n`;
     englishText += `<b>🔗 Watch:</b> ${videoUrl}\n\n`;
     englishText += `<b>📝 Summary (English)</b>\n`;
-    englishText += `<i>${english.overview}</i>\n\n`;
+    englishText += `${english.overview}\n\n`;
     
     englishText += `<b>🎯 Key Points:</b>\n`;
     english.keyPoints.forEach(kp => {
@@ -25,7 +25,7 @@ function formatSummary(videoTitle, videoUrl, summary) {
     let hebrewText = `<b>📺 ${videoTitle}</b>\n\n`;
     hebrewText += `<b>🔗 Watch:</b> ${videoUrl}\n\n`;
     hebrewText += `<b>📝 סיכום (עברית)</b>\n`;
-    hebrewText += `<i>${hebrew.overview}</i>\n\n`;
+    hebrewText += `${hebrew.overview}\n\n`;
     
     hebrewText += `<b>🎯 נקודות מפתח:</b>\n`;
     hebrew.keyPoints.forEach(kp => {
