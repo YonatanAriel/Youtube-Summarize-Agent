@@ -10,7 +10,8 @@ async function searchYoutubeVideos(publishedAfter) {
     order: 'date',
     type: 'video',
     publishedAfter: publishedAfter,
-    maxResults: 50
+    maxResults: 50,
+    q: ' ' 
   };
 
   const response = await axios.get(url, { params, timeout: 15000 });

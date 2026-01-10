@@ -6,7 +6,7 @@ async function testTelegramConnection() {
   
   const response = await axios.post(`${TELEGRAM_API}/sendMessage`, {
     chat_id: config.telegramChatId,
-    text: '✓ YouTube Summarizer Agent is online'
+    text: 'Test message'
   });
 
   return response;
