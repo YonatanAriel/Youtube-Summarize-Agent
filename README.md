@@ -1,423 +1,289 @@
 # YouTube Summarizer Agent
 
-A production-grade, fully autonomous Node.js agent that monitors YouTube channels for new content, automatically generates AI-powered summaries using Google Gemini, and delivers them to Telegram. Designed for 24/7 operation with zero manual intervention after initial setup.
+Autonomous Node.js agent that monitors YouTube channels via the Data API v3, generates structured bilingual summaries using Google Gemini 2.0 Flash with JSON schema enforcement, and delivers formatted messages to Telegram with deep-linked timestamps.
 
 ## Overview
 
-This agent implements a complete content automation pipeline:
+The agent implements a serverless-first architecture optimized for GitHub Actions execution:
 
-1. **Continuous Monitoring** - Polls YouTube RSS feeds at configurable intervals
-2. **Intelligent Filtering** - Excludes live streams, premieres, and scheduled videos
-3. **AI Summarization** - Generates bilingual summaries (English + Hebrew) with timestamped key points
-4. **Reliable Delivery** - Posts to Telegram with automatic retry queuing for failed messages
-5. **Persistent State** - Tracks processed videos to prevent duplicate summarization
-6. **Graceful Error Handling** - Implements exponential backoff, rate limit handling, and connection resilience
-
-## Key Features
-
-- **Multi-Channel Support** - Monitor any YouTube channel by configuring the channel ID
-- **AI-Powered Summaries** - Uses Google Gemini to generate structured summaries with key points and takeaways
-- **Telegram Integration** - Delivers formatted summaries with clickable timestamp links
-- **Persistent Database** - JSON-based storage tracks all processed videos across restarts
-- **Automatic Retry Logic** - Failed Telegram sends are queued and retried with exponential backoff
-- **Structured Logging** - Timestamped logs with debug, info, warn, and error levels
-- **Rate Limit Aware** - Handles Gemini API rate limits gracefully with automatic backoff
-- **Startup Validation** - Verifies all API credentials before starting the monitoring loop
-- **Cost Efficient** - Minimal API usage (~$0.01/month with Gemini's free tier)
+- **YouTube Data API v3** - Fetches videos via channel uploads playlist (bypasses RSS feed limitations)
+- **Gemini 2.0 Flash** - Multimodal LLM with native YouTube video understanding and structured JSON output
+- **Telegram Bot API** - HTML-formatted messages with automatic chunking for the 4096-char limit
+- **JSON-based persistence** - Tracks processed videos with automatic state commits to repository
 
 ## Architecture
 
-### Core Components
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  1. TRIGGER                                                       │
+│     GitHub Actions cron fires daily at 13:00 UTC                 │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  2. FETCH VIDEOS                                                  │
+│     Query YouTube Data API for new uploads since last check      │
+│     Get video metadata (title, publish date, live status)        │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  3. FILTER                                                        │
+│     Skip live streams and scheduled premieres                    │
+│     Skip already-processed videos                                │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  4. SUMMARIZE                                                     │
+│     Send YouTube URL to Gemini for video analysis                │
+│     Receive structured bilingual summary (EN + HE)               │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  5. DELIVER                                                       │
+│     Format summary as HTML with timestamp links                  │
+│     Send to Telegram (auto-split if > 4000 chars)                │
+└──────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  6. PERSIST                                                       │
+│     Mark video as processed in JSON database                     │
+│     Commit state changes back to repository                      │
+└──────────────────────────────────────────────────────────────────┘
+```
 
-**Agent Orchestration** (`src/agent.js`)
-- Startup validation and initialization
-- Cron-based scheduling (daily at 00:07 UTC)
-- Graceful shutdown handling
+## Gemini Integration
 
-**RSS Monitoring** (`src/rssMonitor.js`)
-- Fetches YouTube RSS feeds with retry logic (3 attempts)
-- Tracks last check timestamp to identify new videos
-- Filters out live streams and scheduled content
+The agent uses Gemini's native video understanding capability - no transcript extraction required. Videos are passed directly via `file_data.file_uri`:
 
-**Video Processing** (`src/video/processor.js`)
-- Orchestrates the summarization pipeline
-- Handles errors per-video without stopping the agent
+```javascript
+{
+  contents: [{
+    parts: [
+      { text: summaryPrompt },
+      { file_data: { file_uri: youtubeUrl } }
+    ]
+  }],
+  generationConfig: {
+    responseMimeType: "application/json",
+    responseSchema: summarySchema
+  }
+}
+```
 
-**Gemini Integration** (`src/gemini/client.js`)
-- Structured output with JSON schema validation
-- Rate limit handling with 60-second backoff
-- Exponential backoff for transient errors
-- Bilingual summary generation
+**Response Schema** (enforced by Gemini):
+```javascript
+{
+  english: {
+    overview: string,           // 1-2 sentence summary
+    keyPoints: [{
+      timestamp: string,        // MM:SS format
+      point: string
+    }],
+    takeaways: string[]         // Actionable items
+  },
+  hebrew: { /* identical structure */ }
+}
+```
 
-**Telegram Delivery** (`src/telegram/client.js`)
-- Message splitting for Telegram's 4096-character limit
-- Retry queue for failed sends
-- HTML formatting with clickable timestamp links
+**Retry Strategy:**
+- 401/403: Immediate failure (invalid credentials)
+- 429: 60-second wait, up to 3 retries
+- Transient errors: Exponential backoff (1s, 2s, 4s)
+- Timeout: 120 seconds per request
 
-**Data Persistence** (`src/db/`)
-- JSON-based storage for processed videos
-- Timestamp tracking for incremental checks
-- Query interface for video lookup
+## YouTube Data API Integration
 
-## Quick Start
+Uses the playlist-based approach for reliable video fetching:
+
+1. `GET /channels` - Retrieve `contentDetails.relatedPlaylists.uploads` playlist ID
+2. `GET /playlistItems` - Fetch videos from uploads playlist, filtered by `publishedAfter`
+3. `GET /videos` - Get `liveStreamingDetails` and `status` for filtering
+
+**Video Filtering Logic:**
+```javascript
+// Skip scheduled premieres
+if (liveDetails?.scheduledStartTime > now) return false;
+
+// Skip active live streams
+if (liveDetails?.actualStartTime && !liveDetails?.actualEndTime) return false;
+```
+
+## Telegram Message Handling
+
+**Chunking Algorithm:**
+- Max chunk size: 4000 characters (buffer for HTML tags)
+- Split preference: Last newline at 80%+ of chunk
+- Fallback: Hard split at 4000 chars
+
+**Retry Queue:**
+- Failed messages queued in-memory
+- 30-second delay between retry attempts
+- Persistent retry until success
+
+**Output Format:**
+```html
+<b>Video Title</b>
+
+<b>Watch:</b> https://youtube.com/watch?v=...
+
+<b>Summary (English)</b>
+Overview text...
+
+<b>Key Points:</b>
+<a href="https://youtube.com/watch?v=...&t=150s">[02:30]</a> Point description
+<a href="https://youtube.com/watch?v=...&t=420s">[07:00]</a> Another point
+
+<b>Takeaways:</b>
+• Actionable item 1
+• Actionable item 2
+```
+
+## Setup
 
 ### Prerequisites
 
-- Node.js 14+ 
-- Three API keys (see below)
-
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure Environment
-
-Copy the template and add your API keys:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-GEMINI_API_KEY=your_gemini_key
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-```
-
-### 3. Obtain API Keys
-
-**Google Gemini API Key:**
-- Visit https://ai.google.dev/aistudio
-- Click "Get API key"
-- Copy to `.env`
-
-**Telegram Bot Token:**
-- Open Telegram, search for @BotFather
-- Send `/newbot` and follow prompts
-- Copy token to `.env`
-
-**Telegram Chat ID:**
-- Search for @userinfobot in Telegram
-- Send `/start` to get your ID
-- Copy to `.env`
-
-### 4. Start the Agent
-
-```bash
-npm start
-```
-
-Expected output:
-```
-[2025-01-09 19:00:00] [info] Agent starting...
-[2025-01-09 19:00:01] [info] Gemini API connection verified
-[2025-01-09 19:00:02] [info] Telegram connection verified
-[2025-01-09 19:00:03] [info] Agent ready. Monitoring for new videos...
-```
-
-## Running 24/7
-
-### Using GitHub Actions (Recommended - 100% Free)
-
-Deploy to GitHub Actions for completely free, automated scheduling with zero maintenance.
-
-**Setup (5 minutes):**
-
-1. **Make your repo public** (if not already)
-   - GitHub repo → Settings → Change repository visibility → Public
-
-2. **Add GitHub Secrets**
-   - Go to GitHub repo → Settings → Secrets and variables → Actions
-   - Click "New repository secret" and add:
-     - `GEMINI_API_KEY` - Your Gemini API key
-     - `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
-     - `TELEGRAM_CHAT_ID` - Your Telegram chat ID
-
-3. **Commit and push**
-   ```bash
-   git add .
-   git commit -m "Add GitHub Actions workflow"
-   git push
-   ```
-
-4. **Verify workflow**
-   - Go to GitHub repo → Actions
-   - You should see "YouTube Summarizer Agent" workflow
-   - Click "Run workflow" to test manually
-
-**How it works:**
-- Runs automatically every day at 00:07 UTC
-- Processes all new videos
-- Commits updated database to repo
-- Logs available in GitHub UI
-- Completely free (public repo)
-
-**Monitor runs:**
-- GitHub repo → Actions → YouTube Summarizer Agent
-- Click any run to see detailed logs
-- Check "Run workflow" history
-
-**Adjust schedule:**
-- Edit `.github/workflows/youtube-summarizer.yml`
-- Change cron expression (line with `cron:`)
-- Commit and push
-
-### Using PM2 (Local Machine)
-
-Install PM2 globally:
-```bash
-npm install -g pm2
-```
-
-Start the agent:
-```bash
-pm2 start src/agent.js --name youtube-agent
-```
-
-Enable auto-restart on system reboot:
-```bash
-pm2 startup
-pm2 save
-```
-
-### Useful PM2 Commands
-
-```bash
-pm2 status                    # View agent status
-pm2 logs youtube-agent        # View live logs
-pm2 stop youtube-agent        # Stop the agent
-pm2 restart youtube-agent     # Restart the agent
-pm2 delete youtube-agent      # Remove from PM2
-```
-
-## Cloud Deployment (Alternative)
-
-**Important:** PM2 only works when your machine is running. If you need 24/7 operation regardless of your laptop's state, deploy to the cloud.
-
-### Recommended Cloud Platforms
-
-**Railway** (Modern, affordable)
-- Pay-as-you-go pricing ($5-10/month)
-- Simple deployment from GitHub
-- Good for Node.js apps
-
-**AWS EC2** (Most control)
-- Micro instance eligible for free tier
-- Full control over environment
-- More complex setup
-
-**DigitalOcean** (Simple, affordable)
-- Droplets starting at $4/month
-- Simple deployment
-- Good documentation
-
-### Basic Railway Deployment
-
-1. Create a Railway account at https://railway.app
-2. Connect your GitHub repo
-3. Railway auto-detects Node.js
-4. Deploy with one click
-5. Agent runs 24/7 on Railway's servers
-
-## Configuration
+- Node.js 18+
+- GitHub repository (for Actions deployment)
 
 ### Environment Variables
 
 ```env
 # Required
-GEMINI_API_KEY=your_key
-TELEGRAM_BOT_TOKEN=your_token
-TELEGRAM_CHAT_ID=your_chat_id
+GEMINI_API_KEY=                 # Google AI Studio API key
+GEMINI_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent
+TELEGRAM_BOT_TOKEN=             # From @BotFather
+TELEGRAM_CHAT_ID=               # Target chat/channel ID
+TELEGRAM_API=https://api.telegram.org/bot
+YOUTUBE_API_KEY=                # Google Cloud Console (YouTube Data API v3)
 
 # Optional
-LOG_LEVEL=info                # debug, info, warn, error
-CHECK_INTERVAL_SECONDS=300    # Polling interval (default: 5 minutes)
+LOG_LEVEL=info                  # debug | info | warn | error
+DEBUG=false                     # Verbose API logging
 ```
 
-### Monitoring Schedule
+### GitHub Actions Deployment
 
-The agent runs on a daily cron schedule (00:07 UTC). Modify the cron expression in `src/agent.js`:
+1. Add secrets to repository (Settings > Secrets > Actions):
+   - `GEMINI_API_KEY`
+   - `GEMINI_ENDPOINT`
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_CHAT_ID`
+   - `TELEGRAM_API`
+   - `YOUTUBE_API_KEY`
 
-```javascript
-const cronExpression = `07 00 * * *`;  // Daily at 00:07 UTC
+2. Workflows are pre-configured:
+   - `youtube-summarizer.yml` - Daily at 13:00 UTC
+   - `youtube-summarizer-test.yml` - Manual trigger (processes latest video)
+
+3. State persistence: Workflow auto-commits `data/` changes after each run
+
+### Local Testing
+
+```bash
+npm install
+cp .env.example .env
+# Configure .env with API keys
+npm start -- --test    # Process single video for testing
 ```
 
 ## Project Structure
 
 ```
 src/
-├── agent.js                      # Main orchestration loop
-├── config.js                     # Configuration loader
-├── logger.js                     # Structured logging
-├── rssMonitor.js                 # YouTube RSS feed monitoring
-├── summaryFormatter.js           # HTML formatting for Telegram
+├── agent.js                    # Entry point (cron-based scheduling)
+├── agent-github-actions.js     # GitHub Actions entry (single execution)
+├── agent-github-actions-test.js # Test mode (process latest video)
+├── config.js                   # Environment validation
+├── logger.js                   # Leveled logging (debug/info/warn/error)
+├── rssMonitor.js               # Video fetch orchestration
+├── summaryFormatter.js         # HTML output generation
+│
 ├── api/
 │   ├── gemini/
-│   │   ├── summarize.js          # Gemini API calls
-│   │   └── test.js               # Connection validation
+│   │   ├── summarize.js        # Gemini API call with schema
+│   │   └── test.js             # Connection validation
 │   ├── telegram/
-│   │   ├── send.js               # Telegram API calls
-│   │   └── test.js               # Connection validation
+│   │   ├── send.js             # sendMessage API call
+│   │   └── test.js             # getMe validation
 │   └── youtube/
-│       ├── search.js             # YouTube search API
-│       └── details.js            # Video details API
+│       ├── search.js           # Channel/playlist fetching
+│       └── details.js          # Video metadata (live status)
+│
 ├── gemini/
-│   ├── client.js                 # Gemini client wrapper
-│   ├── prompts.js                # Summarization prompts
-│   └── schema.js                 # Response schema validation
+│   ├── client.js               # Retry logic, error handling
+│   ├── prompts.js              # Summarization prompt
+│   └── schema.js               # JSON response schema
+│
 ├── telegram/
-│   ├── client.js                 # Telegram client wrapper
-│   ├── sendSingleMessage.js      # Single message sender
-│   ├── splitMessage.js           # Message splitting logic
-│   ├── retryQueue.js             # Failed message retry queue
-│   └── testConnection.js         # Connection test
+│   ├── client.js               # High-level send interface
+│   ├── sendSingleMessage.js    # Single message dispatch
+│   ├── splitMessage.js         # Chunking algorithm
+│   ├── retryQueue.js           # Failed message queue
+│   └── testConnection.js       # Connection validation
+│
 ├── youtube/
-│   ├── fetcher.js                # Video fetching logic
-│   ├── videoFilter.js            # Filter live/scheduled videos
-│   └── checkTime.js              # Timestamp tracking
+│   ├── fetcher.js              # Video object mapping
+│   ├── videoFilter.js          # Live/premiere filtering
+│   └── checkTime.js            # Last-check timestamp I/O
+│
 ├── video/
-│   └── processor.js              # Per-video processing pipeline
+│   └── processor.js            # Per-video pipeline orchestration
+│
 ├── db/
-│   ├── index.js                  # Database interface
-│   ├── storage.js                # JSON storage layer
-│   └── queries.js                # Query functions
+│   ├── index.js                # Database interface
+│   ├── storage.js              # JSON file I/O
+│   └── queries.js              # isProcessed, markProcessed
+│
 ├── test/
-│   └── testMode.js               # Single-video test mode
+│   └── testMode.js             # Single-video test execution
+│
 └── utils/
-    └── timestamps.js             # Timestamp utilities
+    └── timestamps.js           # Timestamp parsing/formatting
 
 data/
-├── processed.json                # Processed videos database
-└── .last-check                   # Last check timestamp
+├── processed.json              # Processed video records
+└── .last-check                 # Last check ISO timestamp
+
+.github/workflows/
+├── youtube-summarizer.yml      # Production (daily cron)
+└── youtube-summarizer-test.yml # Manual test trigger
 ```
 
-## How It Works
+## Scripts
 
-### Startup Phase
-
-1. Load and validate environment configuration
-2. Test Gemini API connection
-3. Test Telegram connection
-4. Load previously processed videos from database
-5. Check for any new videos since last run
-6. Schedule recurring monitoring job
-
-### Monitoring Loop
-
-Triggered daily at 00:07 UTC:
-
-1. **Fetch** - Query YouTube RSS feed for videos published since last check
-2. **Filter** - Exclude live streams, premieres, and scheduled content
-3. **Process** - For each new video:
-   - Send to Gemini for summarization
-   - Generate bilingual summary with key points
-   - Format as HTML with timestamp links
-   - Send to Telegram
-   - Mark as processed in database
-4. **Handle Errors** - Retry failed Telegram sends, log issues
-
-### Error Handling Strategy
-
-- **YouTube API Failures** - Retry up to 3 times with 2-second delays
-- **Gemini Rate Limits** - Wait 60 seconds and retry (up to 3 attempts)
-- **Gemini Transient Errors** - Exponential backoff (1s, 2s, 4s)
-- **Telegram Send Failures** - Queue for retry with exponential backoff
-- **Invalid Credentials** - Fail fast with clear error message
-
-## Logging
-
-The agent provides structured, timestamped logging:
-
-```
-[2025-01-09 19:05:35] [info] Checking RSS feed...
-[2025-01-09 19:05:37] [info] NEW VIDEO: "Building with AI"
-[2025-01-09 19:05:38] [info] Summarizing with Gemini...
-[2025-01-09 19:05:58] [info] Got summary (1,245 tokens)
-[2025-01-09 19:05:59] [info] Sending to Telegram...
-[2025-01-09 19:06:00] [info] Sent to Telegram
-```
-
-Redirect logs to a file:
-```bash
-npm start > agent.log 2>&1
-```
-
-## Troubleshooting
-
-### Agent Exits Immediately
-
-**Cause:** Missing or invalid API keys
-
-**Solution:**
-- Verify all three keys are in `.env`
-- Test keys individually using the test endpoints
-- Check for typos or extra whitespace
-
-### No Videos Being Summarized
-
-**Cause:** Incorrect channel ID or no new videos
-
-**Solution:**
-- Verify the YouTube channel ID in `src/config.js`
-- Check logs: `pm2 logs youtube-agent`
-- Ensure Telegram chat ID is correct
-- Verify you've sent at least one message to your bot
-
-### Rate Limit Errors
-
-**Cause:** Gemini API rate limits exceeded
-
-**Solution:**
-- Agent automatically waits 60 seconds and retries
-- Reduce monitoring frequency if errors persist
-- Consider upgrading Gemini API tier
-
-### Telegram Send Failures
-
-**Cause:** Invalid token or chat ID
-
-**Solution:**
-- Verify `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env`
-- Test connection: `npm start -- --test`
-- Ensure bot has permission to send messages
-
-## Testing
-
-Run the test suite:
-
-```bash
-npm test
-```
-
-Test a single video in isolation:
-
-```bash
-npm start -- --test
-```
-
-## Performance Characteristics
-
-- **Memory Usage** - ~50MB baseline (minimal database overhead)
-- **CPU Usage** - Negligible (mostly idle between checks)
-- **Network** - ~2-3 API calls per video (YouTube search, details, Gemini)
-- **Cost** - ~$0.001-0.01 per video with Gemini free tier
-- **Latency** - 20-30 seconds per video (Gemini processing time)
+| Command | Description |
+|---------|-------------|
+| `npm start` | Run agent with node-cron (local) |
+| `npm run github-actions` | Single execution for CI |
+| `npm run github-actions-test` | Process latest video (ignores state) |
+| `npm test` | Run Jest test suite |
 
 ## Dependencies
 
-- **axios** - HTTP client for API calls
-- **dotenv** - Environment configuration
-- **node-cron** - Scheduling
-- **xml2js** - RSS feed parsing
-- **jest** - Testing framework
-- **fast-check** - Property-based testing
+| Package | Version | Purpose |
+|---------|---------|---------|
+| axios | ^1.6.2 | HTTP client |
+| dotenv | ^16.3.1 | Environment loading |
+| node-cron | - | Local scheduling |
+| xml2js | ^0.6.2 | XML parsing (legacy) |
+| jest | ^29.7.0 | Testing |
+| fast-check | ^3.14.0 | Property-based testing |
+
+## Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Missing env vars | Exit with code 1, clear error message |
+| YouTube API 403 | Retry 3x with 2s delay |
+| Gemini 429 | Wait 60s, retry up to 3x |
+| Gemini timeout | Fail after 120s |
+| Telegram 401/403 | Log error, continue processing |
+| Telegram network error | Queue for retry (30s intervals) |
 
 ## License
 
-MIT - See LICENSE file for details
-
-This project is open source and free to use, modify, and distribute. You can use it for personal or commercial projects without restriction.
+MIT
