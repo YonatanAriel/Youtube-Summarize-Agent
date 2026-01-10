@@ -12,9 +12,20 @@ async function checkNewVideos() {
       const lastCheck = getLastCheckTime();
       const publishedAfter = lastCheck.toISOString();
       
+      if (process.env.DEBUG === 'true') {
+        logger.info(`[DEBUG] RSS Monitor attempt ${attempt}/${maxRetries}`);
+        logger.info(`[DEBUG] Last check time: ${lastCheck.toISOString()}`);
+        logger.info(`[DEBUG] Fetching videos published after: ${publishedAfter}`);
+      }
+      
       const items = await fetchNewVideos(publishedAfter);
       
+      if (process.env.DEBUG === 'true') {
+        logger.info(`[DEBUG] Fetch returned ${items ? items.length : 0} items`);
+      }
+      
       if (!items || items.length === 0) {
+        logger.info('No new videos found');
         saveLastCheckTime();
         return [];
       }
@@ -25,6 +36,10 @@ async function checkNewVideos() {
       const videoObjects = mapToVideoObjects(items, videoDetails);
       const filteredVideos = filterVideos(videoObjects);
 
+      if (process.env.DEBUG === 'true') {
+        logger.info(`[DEBUG] After filtering: ${filteredVideos.length} videos`);
+      }
+
       saveLastCheckTime();
       return filteredVideos;
     } catch (error) {
@@ -32,12 +47,16 @@ async function checkNewVideos() {
       logger.debug(`YouTube API attempt ${attempt} failed: ${error.message}`);
       
       if (attempt < maxRetries) {
+        logger.info(`Retrying in 2 seconds...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
   }
 
   logger.error(`YouTube API fetch failed after ${maxRetries} attempts: ${lastError.message}`);
+  if (process.env.DEBUG === 'true') {
+    logger.error(`[DEBUG] Final error: ${lastError.stack}`);
+  }
   return [];
 }
 

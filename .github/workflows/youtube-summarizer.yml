@@ -26,6 +26,24 @@ jobs:
       - name: Install dependencies
         run: npm install
       
+      - name: Debug - Check environment variables are set
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_ENDPOINT: ${{ secrets.GEMINI_ENDPOINT }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_API: ${{ secrets.TELEGRAM_API }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          echo "=== Environment Variables Check ==="
+          echo "GEMINI_API_KEY is set: $([ -z "$GEMINI_API_KEY" ] && echo 'NO' || echo 'YES')"
+          echo "GEMINI_ENDPOINT is set: $([ -z "$GEMINI_ENDPOINT" ] && echo 'NO' || echo 'YES')"
+          echo "TELEGRAM_BOT_TOKEN is set: $([ -z "$TELEGRAM_BOT_TOKEN" ] && echo 'NO' || echo 'YES')"
+          echo "TELEGRAM_CHAT_ID is set: $([ -z "$TELEGRAM_CHAT_ID" ] && echo 'NO' || echo 'YES')"
+          echo "TELEGRAM_API is set: $([ -z "$TELEGRAM_API" ] && echo 'NO' || echo 'YES')"
+          echo "YOUTUBE_API_KEY is set: $([ -z "$YOUTUBE_API_KEY" ] && echo 'NO' || echo 'YES')"
+          echo "=== End Environment Variables Check ==="
+      
       - name: Run YouTube Summarizer
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -34,6 +52,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_API: ${{ secrets.TELEGRAM_API }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          DEBUG: 'true'
         run: npm run github-actions
       
       - name: Commit and push changes

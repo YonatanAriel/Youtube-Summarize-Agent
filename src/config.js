@@ -1,6 +1,24 @@
-require('dotenv').config();
+// Only load .env file if it exists (for local development)
+// In GitHub Actions, environment variables are passed directly
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    require('dotenv').config();
+  } catch (e) {
+    // dotenv not available or .env file doesn't exist
+  }
+}
 
 const requiredKeys = ['GEMINI_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
+
+// Debug logging
+if (process.env.DEBUG === 'true') {
+  console.log('[CONFIG] DEBUG mode enabled');
+  console.log('[CONFIG] Checking required environment variables...');
+  requiredKeys.forEach(key => {
+    const isSet = !!process.env[key];
+    console.log(`[CONFIG] ${key}: ${isSet ? 'SET' : 'NOT SET'}`);
+  });
+}
 
 for (const key of requiredKeys) {
   if (!process.env[key]) {
