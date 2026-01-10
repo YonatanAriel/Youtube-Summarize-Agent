@@ -2,8 +2,7 @@ const axios = require('axios');
 const config = require('../../config');
 
 async function callGeminiAPI(summaryPrompt, summarySchema, youtubeUrl) {
-  // Use gemini-2.0-flash for more stable YouTube video analysis
-  const geminiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+  const geminiEndpoint = process.env.GEMINI_ENDPOINT;
 
   const response = await axios.post(
     geminiEndpoint,
