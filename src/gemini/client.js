@@ -18,7 +18,23 @@ async function summarizeUrl(youtubeUrl) {
         throw new Error('No summary text in Gemini response');
       }
 
+      // Log the raw response for debugging
+      if (process.env.DEBUG === 'true') {
+        logger.info(`[DEBUG] Raw Gemini response: ${responseText.substring(0, 300)}...`);
+      }
+
       const summary = JSON.parse(responseText);
+      
+      // Validate that we got actual video content, not generic template
+      const englishOverview = summary.english?.overview || '';
+      const isGenericResponse = englishOverview.toLowerCase().includes('time management') || 
+                                englishOverview.toLowerCase().includes('productivity') ||
+                                englishOverview.toLowerCase().includes('habit');
+      
+      if (isGenericResponse && process.env.DEBUG === 'true') {
+        logger.warn(`[DEBUG] WARNING: Response appears to be generic template, not actual video content`);
+      }
+
       return {
         english: summary.english,
         hebrew: summary.hebrew,

@@ -7,20 +7,7 @@ async function callGeminiAPI(summaryPrompt, summarySchema, youtubeUrl) {
 
   if (process.env.DEBUG === 'true') {
     logger.info(`[DEBUG] Calling Gemini API with URL: ${youtubeUrl}`);
-    logger.info(`[DEBUG] Request payload: ${JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: summaryPrompt.substring(0, 100) + '...' },
-            { file_data: { file_uri: youtubeUrl } }
-          ]
-        }
-      ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: "schema provided"
-      }
-    }, null, 2)}`);
+    logger.info(`[DEBUG] Using schema-based response format`);
   }
 
   try {
@@ -57,7 +44,10 @@ async function callGeminiAPI(summaryPrompt, summarySchema, youtubeUrl) {
 
     if (process.env.DEBUG === 'true') {
       logger.info(`[DEBUG] Gemini API response status: ${response.status}`);
-      logger.info(`[DEBUG] Response data: ${JSON.stringify(response.data, null, 2).substring(0, 500)}...`);
+      const responseText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (responseText) {
+        logger.info(`[DEBUG] Response preview: ${responseText.substring(0, 200)}...`);
+      }
     }
 
     return response;
@@ -69,6 +59,10 @@ async function callGeminiAPI(summaryPrompt, summarySchema, youtubeUrl) {
     throw error;
   }
 }
+
+module.exports = {
+  callGeminiAPI
+};
 
 module.exports = {
   callGeminiAPI
