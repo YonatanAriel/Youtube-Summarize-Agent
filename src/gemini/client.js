@@ -5,6 +5,8 @@ const { summarySchema } = require('./schema');
 const { callGeminiAPI } = require('../api/gemini/summarize');
 const { testGeminiConnection } = require('../api/gemini/test');
 
+const BILLING_402_MESSAGE = 'Gemini API billing: prepay credits depleted (402) — top up in Google AI Studio';
+
 async function summarizeUrl(youtubeUrl) {
   let retries = 0;
   const maxRetries = 3;
@@ -28,6 +30,11 @@ async function summarizeUrl(youtubeUrl) {
       if (error.response?.status === 401 || error.response?.status === 403) {
         logger.error(`Gemini API: Invalid API key (${error.response.status})`);
         throw error;
+      }
+
+      if (error.response?.status === 402) {
+        logger.error(BILLING_402_MESSAGE);
+        throw new Error(BILLING_402_MESSAGE);
       }
 
       if (error.response?.status === 429) {
@@ -67,6 +74,9 @@ async function testConnection() {
   } catch (error) {
     if (error.response?.status === 401 || error.response?.status === 403) {
       throw new Error(`Gemini API key is invalid`);
+    }
+    if (error.response?.status === 402) {
+      throw new Error(BILLING_402_MESSAGE);
     }
     throw new Error(`Gemini API test failed: ${error.message}`);
   }
