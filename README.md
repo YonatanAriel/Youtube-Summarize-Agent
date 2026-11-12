@@ -154,7 +154,7 @@ Overview text...
 ```env
 # Required
 GEMINI_API_KEY=                 # Google AI Studio API key
-GEMINI_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent
+GEMINI_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent
 TELEGRAM_BOT_TOKEN=             # From @BotFather
 TELEGRAM_CHAT_ID=               # Target chat/channel ID
 TELEGRAM_API=https://api.telegram.org/bot
