@@ -7,6 +7,13 @@ const { testGeminiConnection } = require('../api/gemini/test');
 
 const BILLING_402_MESSAGE = 'Gemini API billing: prepay credits depleted (402) — top up in Google AI Studio';
 
+function describeError(error) {
+  const detail = error.response?.data?.error?.message || error.response?.data;
+  if (!detail) return error.message;
+  const text = typeof detail === 'string' ? detail : JSON.stringify(detail);
+  return `${error.message} - ${text.slice(0, 300)}`;
+}
+
 async function summarizeUrl(youtubeUrl) {
   let retries = 0;
   const maxRetries = 3;
@@ -53,10 +60,10 @@ async function summarizeUrl(youtubeUrl) {
         retries++;
         if (retries < maxRetries) {
           const backoffMs = Math.pow(2, retries - 1) * 1000;
-          logger.warn(`Gemini API error: ${error.message}. Retrying...`);
+          logger.warn(`Gemini API error: ${describeError(error)}. Retrying...`);
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
         } else {
-          logger.error(`Gemini API failed after ${maxRetries} attempts: ${error.message}`);
+          logger.error(`Gemini API failed after ${maxRetries} attempts: ${describeError(error)}`);
           throw error;
         }
       }
@@ -78,7 +85,7 @@ async function testConnection() {
     if (error.response?.status === 402) {
       throw new Error(BILLING_402_MESSAGE);
     }
-    throw new Error(`Gemini API test failed: ${error.message}`);
+    throw new Error(`Gemini API test failed: ${describeError(error)}`);
   }
 }
 
